@@ -1,1 +1,520 @@
-PLACEHOLDER
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Hybrid Channel-Manager Stack</title>
+<style>
+  :root {
+    --paper: #eef0ea;
+    --paper-raised: #e5e8de;
+    --ink: #1c211d;
+    --ink-soft: #5b6357;
+    --line: #c7ccc0;
+    --line-strong: #a8ae9c;
+    --accent: #34513b;
+    --accent-soft: #34513b1a;
+    --brass: #a9713b;
+    --brass-soft: #a9713b1a;
+    --code-bg: #e3e6db;
+    --font-display: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --font-body: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #161b15;
+      --paper-raised: #1d231b;
+      --ink: #e7e9de;
+      --ink-soft: #9aa392;
+      --line: #333b2e;
+      --line-strong: #454f3d;
+      --accent: #7fbb8d;
+      --accent-soft: #7fbb8d22;
+      --brass: #d6975a;
+      --brass-soft: #d6975a22;
+      --code-bg: #1d2319;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #161b15;
+    --paper-raised: #1d231b;
+    --ink: #e7e9de;
+    --ink-soft: #9aa392;
+    --line: #333b2e;
+    --line-strong: #454f3d;
+    --accent: #7fbb8d;
+    --accent-soft: #7fbb8d22;
+    --brass: #d6975a;
+    --brass-soft: #d6975a22;
+    --code-bg: #1d2319;
+  }
+  :root[data-theme="light"] {
+    --paper: #eef0ea;
+    --paper-raised: #e5e8de;
+    --ink: #1c211d;
+    --ink-soft: #5b6357;
+    --line: #c7ccc0;
+    --line-strong: #a8ae9c;
+    --accent: #34513b;
+    --accent-soft: #34513b1a;
+    --brass: #a9713b;
+    --brass-soft: #a9713b1a;
+    --code-bg: #e3e6db;
+  }
+
+  * { box-sizing: border-box; }
+  html { color-scheme: light dark; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--brass-soft); }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--brass);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .masthead {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 4rem clamp(1.25rem, 4vw, 3rem) 2.5rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--brass);
+    margin: 0 0 0.9rem;
+  }
+  h1.title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(2rem, 4.4vw, 3.1rem);
+    line-height: 1.06;
+    margin: 0 0 0.85rem;
+    text-wrap: balance;
+    max-width: 20ch;
+  }
+  .dek {
+    font-size: 1.1rem;
+    color: var(--ink-soft);
+    max-width: 56ch;
+    margin: 0 0 1.6rem;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+  }
+  .meta-row span b { color: var(--ink); font-weight: 600; }
+
+  .layout {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 clamp(1.25rem, 4vw, 3rem) 6rem;
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: clamp(1.5rem, 3vw, 3.5rem);
+  }
+
+  nav.rail {
+    position: sticky;
+    top: 2rem;
+    align-self: start;
+    padding-top: 2.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  nav.rail a {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: 0.4rem 0.6rem;
+    border-left: 2px solid transparent;
+    border-radius: 0 3px 3px 0;
+  }
+  nav.rail a:hover { color: var(--ink); background: var(--paper-raised); border-left-color: var(--line-strong); }
+  nav.rail a b { color: var(--brass); font-weight: 600; margin-right: 0.5em; }
+
+  main { min-width: 0; padding-top: 2.75rem; }
+
+  section.block {
+    padding: 2.75rem 0;
+    border-bottom: 1px solid var(--line);
+    scroll-margin-top: 1.5rem;
+  }
+  section.block:last-child { border-bottom: none; }
+
+  .block-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.9rem;
+    margin-bottom: 1.1rem;
+  }
+  .block-num {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--brass);
+    letter-spacing: 0.04em;
+  }
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.5rem;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 1rem;
+    margin: 1.6rem 0 0.6rem;
+    color: var(--ink);
+  }
+  section.block > p, section.block > ul {
+    max-width: 66ch;
+    color: var(--ink);
+  }
+  section.block > p { margin: 0 0 1rem; }
+  section.block > p.lead { font-size: 1.05rem; color: var(--ink-soft); }
+  ul.notes { padding-left: 1.1rem; margin: 0 0 1rem; }
+  ul.notes li { margin-bottom: 0.6rem; max-width: 62ch; }
+  ul.notes li b { color: var(--ink); }
+
+  .sheet {
+    margin: 1.5rem 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    background: var(--paper-raised);
+    position: relative;
+    padding: 1.4rem 1.4rem 1.1rem;
+  }
+  .sheet::before, .sheet::after,
+  .sheet .tick-br::before, .sheet .tick-br::after { content: ""; }
+  .sheet-corner {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border: 1.5px solid var(--brass);
+  }
+  .sheet-corner.tl { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  .sheet-corner.tr { top: -1px; right: -1px; border-left: none; border-bottom: none; }
+  .sheet-corner.bl { bottom: -1px; left: -1px; border-right: none; border-top: none; }
+  .sheet-corner.br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+  .sheet-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 0.9rem;
+  }
+  .sheet-scroll { overflow-x: auto; }
+  .sheet pre.mermaid { margin: 0; min-width: 560px; }
+
+  .tbl-wrap { overflow-x: auto; margin: 1.4rem 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 640px;
+    font-size: 0.9rem;
+  }
+  thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 0 0.9rem 0.6rem 0;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  tbody td {
+    padding: 0.75rem 0.9rem 0.75rem 0;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.key { font-family: var(--font-mono); font-size: 0.84rem; color: var(--accent); white-space: nowrap; }
+  td.num { font-variant-numeric: tabular-nums; }
+  td b.item { color: var(--ink); font-weight: 600; }
+  td span.muted { color: var(--ink-soft); }
+
+  code, .code-inline {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+  }
+  pre.tree {
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1.1rem 1.3rem;
+    overflow-x: auto;
+    line-height: 1.65;
+    margin: 1.4rem 0;
+  }
+  pre.tree .dir { color: var(--accent); }
+  pre.tree .comment { color: var(--ink-soft); }
+
+  .pill-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.2rem 0; }
+  .pill {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 20px;
+    color: var(--ink-soft);
+  }
+  .pill.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+  footer {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 2rem clamp(1.25rem, 4vw, 3rem) 3rem;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    color: var(--ink-soft);
+  }
+
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.rail {
+      position: static;
+      flex-direction: row;
+      flex-wrap: wrap;
+      padding-top: 0;
+      margin-bottom: 0.5rem;
+      gap: 0.4rem;
+    }
+    nav.rail a { border-left: none; border: 1px solid var(--line); }
+    main { padding-top: 1.5rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
+  }
+  html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <p class="eyebrow">Architecture memo — 14 Jul 2026</p>
+  <h1 class="title">The hybrid channel-manager stack</h1>
+  <p class="dek">A buildable architecture for the cabin &amp; food site: Next.js and Payload for the site and content, a certified channel manager for the calendar and the Airbnb / Booking.com sync nobody can build alone, Stripe for direct payment.</p>
+  <div class="meta-row">
+    <span>Prepared for <b>dancox-2@pm.me</b></span>
+    <span>Stack path <b>Hybrid via channel manager</b></span>
+    <span>Status <b>Sketch — for review</b></span>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="rail">
+    <a href="#overview"><b>00</b>Overview</a>
+    <a href="#map"><b>01</b>System map</a>
+    <a href="#components"><b>02</b>Components</a>
+    <a href="#flow"><b>03</b>Booking flow</a>
+    <a href="#content"><b>04</b>Content model</a>
+    <a href="#repo"><b>05</b>Repo &amp; hosting</a>
+    <a href="#vendor"><b>06</b>Vendor choice</a>
+    <a href="#risks"><b>07</b>Risks</a>
+  </nav>
+
+  <main>
+
+    <section class="block" id="overview">
+      <div class="block-head"><span class="block-num">00</span><h2>Overview</h2></div>
+      <p class="lead">Airbnb and Booking.com don't hand out self-serve APIs — that access is reserved for a small set of certified Channel Manager / PMS partners. So the calendar and OTA sync aren't something you build; they're something you buy. Everything else — the brand, the content, the checkout — you own outright.</p>
+      <p>The split: <b>Next.js + Payload CMS</b> is your site, under your control, editable by staff without a developer. <b>Lodgify</b> (or a peer) is the piece that actually talks to Airbnb and Booking.com, holds the live calendar, and prevents double-booking across channels. <b>Stripe</b> takes the payment. The three meet at one seam: your site calls the channel manager for a quote, takes payment, then tells the channel manager to confirm the reservation.</p>
+    </section>
+
+    <section class="block" id="map">
+      <div class="block-head"><span class="block-num">01</span><h2>System map</h2></div>
+      <p>Guest-facing traffic never touches the channel manager directly for content — only for live availability, rates, and reservations. Content and commerce are deliberately separate systems.</p>
+      <div class="sheet">
+        <span class="sheet-corner tl"></span><span class="sheet-corner tr"></span><span class="sheet-corner bl"></span><span class="sheet-corner br"></span>
+        <p class="sheet-label">Fig. 01 — System map</p>
+        <div class="sheet-scroll">
+<pre class="mermaid">
+flowchart LR
+  Guest["Guest browser"] --> Web["Next.js — Vercel"]
+  Web -->|content + drafts| CMS["Payload CMS<br/>Render / Railway"]
+  CMS --> DB[("Postgres — Neon")]
+  CMS --> Media[("R2 media store")]
+  Web -->|"availability + rate quote"| Channel["Channel manager API<br/>Lodgify"]
+  Channel <-->|certified sync| Airbnb["Airbnb"]
+  Channel <-->|certified sync| BookingCom["Booking.com"]
+  Channel <-->|certified sync| Vrbo["Vrbo"]
+  Web -->|Checkout Session| Stripe["Stripe"]
+  Stripe -->|webhook| App["App route handlers"]
+  App -->|create reservation| Channel
+  Channel -->|webhook| App
+  App --> DB
+  App -->|confirmation| Email["Resend"]
+</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="components">
+      <div class="block-head"><span class="block-num">02</span><h2>Components</h2></div>
+      <p>Eight pieces, each doing one job. None of them is trying to be the others.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Layer</th><th>Choice</th><th>Role</th><th>Why this one</th></tr></thead>
+          <tbody>
+            <tr><td class="key">web</td><td><b class="item">Next.js 15, Vercel</b></td><td>Marketing pages, booking UI, server-side calls to CMS and channel manager</td><td>SSR for SEO, ISR for content that changes in the CMS, one deploy target</td></tr>
+            <tr><td class="key">cms</td><td><b class="item">Payload CMS</b> (self-hosted, TS)</td><td>Pages, photos, events, menus, cabin copy</td><td>Real admin UI for non-technical staff; schema lives in code, versioned with the site</td></tr>
+            <tr><td class="key">booking</td><td><b class="item">Lodgify</b> (or Hostaway / Guesty / Smoobu)</td><td>Owns the calendar, rates, and the certified Airbnb / Booking.com / Vrbo sync</td><td>The one piece nobody builds from scratch — direct OTA partnerships are gatekept</td></tr>
+            <tr><td class="key">pay</td><td><b class="item">Stripe</b> Checkout + webhooks</td><td>Payment for direct bookings and prepaid dining events</td><td>Handles SCA/3-D Secure, keeps card data off your servers</td></tr>
+            <tr><td class="key">db</td><td><b class="item">Postgres</b> on Neon</td><td>Backs Payload; also a thin local mirror of bookings for CRM/reporting</td><td>Branching is useful for CMS schema changes; one connection string, two purposes</td></tr>
+            <tr><td class="key">media</td><td><b class="item">Cloudflare R2</b></td><td>Original photos and video</td><td>S3-compatible, no egress fee, pairs with Next.js Image</td></tr>
+            <tr><td class="key">mail</td><td><b class="item">Resend</b></td><td>Booking confirmations, RSVPs, staff alerts</td><td>Simple API, React email templates, solid deliverability</td></tr>
+            <tr><td class="key">edge</td><td><b class="item">Cloudflare</b></td><td>DNS, CDN, image resizing in front of Vercel</td><td>Already sits in front of R2 — one vendor for both</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="flow">
+      <div class="block-head"><span class="block-num">03</span><h2>Booking flow</h2></div>
+      <p>The channel manager's quote comes with a short hold — treat that hold, not your own logic, as what actually prevents a double-booking. Your app's job is to get from "guest wants these dates" to "reservation confirmed" before that hold expires.</p>
+      <div class="sheet">
+        <span class="sheet-corner tl"></span><span class="sheet-corner tr"></span><span class="sheet-corner bl"></span><span class="sheet-corner br"></span>
+        <p class="sheet-label">Fig. 02 — Direct booking, cabin checkout</p>
+        <div class="sheet-scroll">
+<pre class="mermaid">
+sequenceDiagram
+  participant G as Guest
+  participant W as Next.js
+  participant C as Channel manager
+  participant S as Stripe
+  participant A as App server
+
+  G->>W: Select cabin + dates
+  W->>C: Get availability & rate
+  C-->>W: Quote + hold (~15 min)
+  G->>W: Confirm details
+  W->>S: Create Checkout Session
+  S-->>G: Hosted Checkout
+  G->>S: Pay
+  S-->>A: webhook: checkout.session.completed
+  A->>C: Create reservation
+  C-->>A: Reservation confirmed
+  C--)Airbnb: Push calendar block
+  C--)BookingCom: Push calendar block
+  A->>A: Write local booking record
+  A-->>G: Confirmation email
+</pre>
+        </div>
+      </div>
+      <p>Dining events skip the channel manager entirely — a Payload <code>Events</code> entry with a Stripe price behind it is enough; there's no OTA calendar to keep in sync for a table reservation.</p>
+    </section>
+
+    <section class="block" id="content">
+      <div class="block-head"><span class="block-num">04</span><h2>Content model</h2></div>
+      <p>Payload collections. The rule that keeps this from getting tangled: <b>Cabins</b> holds copy and photos, never rates or availability — those live only in the channel manager, referenced by ID.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Collection</th><th>Key fields</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td class="key">Pages</td><td>slug, title, sections[], seo{}</td><td><span class="muted">Block-based body for landing / about / experience pages</span></td></tr>
+            <tr><td class="key">Cabins</td><td>name, slug, description, gallery[], amenities[], maxGuests, <b>channelManagerId</b></td><td><span class="muted">The ID links this record to its Lodgify property — no rate fields here</span></td></tr>
+            <tr><td class="key">Events</td><td>title, date, description, coverImage, capacity, ticketPriceCents, stripePriceId</td><td><span class="muted">Dining events, tastings — ticketed straight through Stripe Checkout</span></td></tr>
+            <tr><td class="key">Menus</td><td>name, courses[]{ name, description, priceCents, dietaryTags[] }</td><td><span class="muted">Rendered on the food / dining pages</span></td></tr>
+            <tr><td class="key">Media</td><td>file, alt, credit</td><td><span class="muted">Shared library, stored in R2</span></td></tr>
+            <tr><td class="key">Bookings</td><td>channelManagerReservationId, cabinId, guestEmail, checkIn, checkOut, amountCents, status</td><td><span class="muted">Local mirror only, written by the webhook handler — source of truth stays with the channel manager</span></td></tr>
+            <tr><td class="key">Staff</td><td>name, email, role</td><td><span class="muted">Payload's own auth — role-gated editor vs admin access</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="repo">
+      <div class="block-head"><span class="block-num">05</span><h2>Repo &amp; hosting</h2></div>
+      <p>One monorepo, two deployables. Shared types keep the <code>Cabin</code> and <code>Booking</code> shapes honest between them.</p>
+      <pre class="tree"><span class="dir">apps/</span>
+  <span class="dir">web/</span>          <span class="comment"># Next.js — marketing site + booking UI</span>
+  <span class="dir">cms/</span>          <span class="comment"># Payload — admin panel + content API</span>
+<span class="dir">packages/</span>
+  <span class="dir">types/</span>        <span class="comment"># Shared TS: Cabin, Event, Booking</span>
+  <span class="dir">ui/</span>           <span class="comment"># Shared design-system components</span></pre>
+      <div class="pill-row">
+        <span class="pill on">Vercel — web</span>
+        <span class="pill on">Render / Railway — cms</span>
+        <span class="pill on">Neon — postgres</span>
+        <span class="pill on">Cloudflare R2 — media</span>
+        <span class="pill on">Lodgify — booking + sync</span>
+        <span class="pill on">Stripe — payments</span>
+        <span class="pill on">Resend — email</span>
+      </div>
+    </section>
+
+    <section class="block" id="vendor">
+      <div class="block-head"><span class="block-num">06</span><h2>Vendor choice</h2></div>
+      <p>This is the decision with the most gravity in the whole stack — moving calendars between channel managers later means re-listing on every OTA. Worth a short bake-off before committing.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Vendor</th><th>OTA partnerships</th><th>Own booking engine + Stripe</th><th>Best fit</th></tr></thead>
+          <tbody>
+            <tr><td class="key">Lodgify</td><td>Airbnb, Booking.com, Vrbo</td><td>Yes, native Stripe</td><td><span class="muted">Small portfolios (1–20 units), wants a polished embeddable widget</span></td></tr>
+            <tr><td class="key">Hostaway</td><td>Airbnb, Booking.com, Vrbo, Expedia</td><td>Yes, via Stripe Connect</td><td><span class="muted">Wants deeper automation / a full PMS, not just a calendar</span></td></tr>
+            <tr><td class="key">Guesty</td><td>Airbnb, Booking.com, Vrbo, Expedia</td><td>Yes, native</td><td><span class="muted">Larger or multi-property operators, more enterprise-shaped pricing</span></td></tr>
+            <tr><td class="key">Smoobu</td><td>Airbnb, Booking.com, Vrbo, Expedia</td><td>Yes, native Stripe</td><td><span class="muted">Cheapest of the four, simplest setup — fewer automation/reporting features than Lodgify or Hostaway</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="risks">
+      <div class="block-head"><span class="block-num">07</span><h2>Risks &amp; tradeoffs</h2></div>
+      <ul class="notes">
+        <li><b>The hold window is borrowed, not owned.</b> The ~15-minute quote hold is enforced by the channel manager, not your code. Confirm its exact TTL before launch, and treat the channel manager's reservation webhook — not the Stripe webhook — as what actually means "booked."</li>
+        <li><b>Webhooks get dropped.</b> Verify Stripe signatures, make the reservation-creation handler idempotent since retries happen, and reconcile nightly against the channel manager's API in case an event never arrives.</li>
+        <li><b>The calendar is the hard-to-reverse piece.</b> Switching channel managers later means re-listing on every OTA from scratch. Everything else in this stack — the CMS, the frontend — can be replaced without anyone outside your team noticing.</li>
+        <li><b>Three sources of truth, one boundary.</b> Channel manager owns calendar and rates. Payload owns content. Postgres owns booking history. Keep it that way — the moment someone edits a rate inside the CMS instead of the channel manager, the two go out of sync.</li>
+      </ul>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  Architecture sketch — hybrid channel-manager path · prepared for dancox-2@pm.me
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  function mermaidTheme() {
+    var t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return 'dark';
+    if (t === 'light') return 'default';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
+  }
+  mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', theme: mermaidTheme() });
+</script>
+</body>
+</html>
